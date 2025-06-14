@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Academic Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+  * { box-sizing: border-box; margin:0; padding:0; }
+
+  /* ---------- SHARED ---------- */
+  body {
+    font-family: Arial, sans-serif;
+    color:#fff;
+    transition: background .4s ease, color .3s ease;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+  }
+  .container{max-width:600px;margin:auto;padding:20px;}
+
+  h1{text-align:center;margin-bottom:20px;}
+  input,button{
+    padding:10px;border-radius:8px;font-size:16px;border:1px solid #ccc;
+  }
+  button{background:#4caf50;color:#fff;cursor:pointer;}
+  button:hover{background:#45a049;}
+
+  .login-group,.form-group{display:flex;gap:10px;margin-bottom:15px;}
+  @media(max-width:600px){.login-group,.form-group{flex-direction:column;}}
+
+  table{width:100%;border-collapse:collapse;margin-top:15px;}
+  th,td{padding:10px;border-bottom:1px solid #ddd;}
+
+  .gpa{font-size:20px;text-align:center;margin:15px 0;}
+  canvas{margin-top:20px;width:100%!important;}
+
+  .dark-mode-toggle{float:right;margin-bottom:10px;}
+
+  /* ---------- BACKGROUNDS ---------- */
+  /* Login pastel sunrise */
+  .login-bg{
+    background:radial-gradient(circle at 30% 20%, #ffe3e3 0%, #ffb6c1 40%, #ffd5a5 65%, #fff1ba 100%);
+  }
+
+  /* Tracker blue gradient with waves */
+  .tracker-bg{
+    background:linear-gradient(145deg,#1e3c72,#2a5298);
+    background-attachment:fixed;background-repeat:no-repeat;background-size:cover;
+  }
+
+  /* ---------- WAVES ---------- */
+  .wave-container,.wave-bottom{
+    position:relative;width:100%;height:100px;overflow:hidden;
+  }
+  .wave-container svg,.wave-bottom svg{
+    display:block;width:200%;height:100%;animation:waveMove 10s linear infinite;
+  }
+  .wave-bottom{transform:rotate(180deg);margin-top:50px;}
+
+  @keyframes waveMove{0%{transform:translateX(0);}100%{transform:translateX(-50%);}}
+
+  /* Hide waves when we’re on the login screen */
+  .login-bg .wave-container,
+  .login-bg .wave-bottom{display:none;}
+</style>
+</head>
+
+<!-- Default body class is login-bg -->
+<body class="login-bg">
+
+  <!-- TOP WAVE (visible only after login) -->
+  <div class="wave-container">
+    <svg viewBox="0 0 1440 320">
+      <path fill="#2a5298" fill-opacity="1" d="M0,160L80,144C160,128,320,96,480,117.3C640,139,800,213,960,240C1120,267,1280,245,1360,234.7L1440,224L1440,0  L0,0Z"></path>
+    </svg>
+  </div>
+
+  <!-- APP CONTENT -->
+  <div class="container" id="app">
+    <button class="dark-mode-toggle" onclick="toggleDarkMode()">🌙 Toggle Dark Mode</button>
+
+    <!-- LOGIN SCREEN -->
+    <div id="loginSection">
+      <h1>Welcome – Sign In</h1>
+      <div class="login-group">
+        <input type="email" id="email" placeholder="Email">
+        <input type="password" id="password" placeholder="Password">
+      </div>
+      <button onclick="login()">Login / Signup</button>
+    </div>
+
+    <!-- TRACKER SCREEN -->
+    <div id="trackerSection" style="display:none;">
+      <h1>📚 Academic Tracker</h1>
+      <div class="form-group">
+        <input type="text" id="subject" placeholder="Subject">
+        <input type="number" id="grade" placeholder="Grade (0‑100)">
+        <button onclick="addGrade()">Add</button>
+      </div>
+
+      <table>
+        <thead><tr><th>Subject</th><th>Grade</th></tr></thead>
+        <tbody id="gradeTable"></tbody>
+      </table>
+
+      <div class="gpa" id="gpaText">GPA: 0.00</div>
+      <canvas id="gradeChart"></canvas>
+      <button onclick="logout()">Logout</button>
+    </div>
+  </div>
+
+  <!-- BOTTOM WAVE -->
+  <div class="wave-bottom">
+    <svg viewBox="0 0 1440 320">
+      <path fill="#1e3c72" fill-opacity="1" d="M0,128L80,122.7C160,117,320,107,480,117.3C640,128,800,160,960,186.7C1120,213,1280,235,1360,245.3L1440,256  L1440,320 0,320Z"></path>
+    </svg>
+  </div>
+
+<script>
+  /* ---------- CHART ---------- */
+  const ctx=document.getElementById('gradeChart').getContext('2d');
+  let gradeChart=new Chart(ctx,{type:'bar',data:{labels:[],datasets:[{label:'Grades',data:[],backgroundColor:'rgba(75,192,192,.7)'}]}});
+
+  /* ---------- STORAGE ---------- */
+  const users=JSON.parse(localStorage.getItem('users')||'{}');
+  let currentUser=localStorage.getItem('currentUser');
+  let grades=JSON.parse(localStorage.getItem('grades_'+currentUser)||'[]');
+
+  /* ---------- AUTH ---------- */
+  function login(){
+    const email=document.getElementById('email').value.trim();
+    const pass=document.getElementById('password').value;
+    if(!email||!pass)return alert('Enter email & password.');
+
+    if(!users[email]){users[email]=pass;localStorage.setItem('users',JSON.stringify(users));}
+    else if(users[email]!==pass)return alert('Incorrect password!');
+
+    currentUser=email;
+    localStorage.setItem('currentUser',currentUser);
+    grades=JSON.parse(localStorage.getItem('grades_'+currentUser)||'[]');
+    showApp();
+  }
+  function logout(){localStorage.removeItem('currentUser');location.reload();}
+
+  /* ---------- UI TOGGLE ---------- */
+  function showApp(){
+    document.getElementById('loginSection').style.display='none';
+    document.getElementById('trackerSection').style.display='block';
+    document.body.classList.replace('login-bg','tracker-bg');
+    renderTable();
+  }
+
+  /* ---------- GPA / TABLE ---------- */
+  function addGrade(){
+    const subject=document.getElementById('subject').value.trim();
+    const grade=parseFloat(document.getElementById('grade').value);
+    if(!subject||isNaN(grade)||grade<0||grade>100)return alert('Valid subject & grade 0‑100!');
+    grades.push({subject,grade});
+    saveGrades();renderTable();
+    document.getElementById('subject').value='';document.getElementById('grade').value='';
+  }
+  function renderTable(){
+    const tbody=document.getElementById('gradeTable');tbody.innerHTML='';
+    let total=0;
+    grades.forEach(g=>{tbody.innerHTML+=`<tr><td>${g.subject}</td><td>${g.grade}</td></tr>`;total+=g.grade;});
+    const gpa=grades.length?(total/grades.length/25).toFixed(2):'0.00';
+    document.getElementById('gpaText').innerText='GPA: '+gpa;
+
+    gradeChart.data.labels=grades.map(g=>g.subject);
+    gradeChart.data.datasets[0].data=grades.map(g=>g.grade);
+    gradeChart.update();
+  }
+  function saveGrades(){localStorage.setItem('grades_'+currentUser,JSON.stringify(grades));}
+
+  /* ---------- DARK MODE ---------- */
+  function toggleDarkMode(){document.body.classList.toggle('dark');}
+
+  /* ---------- AUTO SHOW IF LOGGED ---------- */
+  if(currentUser)showApp();
+</script>
+</body>
+</html>
